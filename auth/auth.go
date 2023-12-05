@@ -58,10 +58,9 @@ func getAcessToken(authCode string, clientId string, clientSecret string, redire
 
 func Login() {
 	ctx := db.Client.Context()
-	conf := config.Reader()
-	appKey := conf.BaiduDisk.AppKey
-	appSecret := conf.BaiduDisk.SecretKey
-	redirectUri := conf.BaiduDisk.RedirectUri
+	appKey := config.BackUpConfig.BaiduDisk.AppKey
+	appSecret := config.BackUpConfig.BaiduDisk.SecretKey
+	redirectUri := config.BackUpConfig.BaiduDisk.RedirectUri
 	authCode := getAuthCode(appKey, appSecret)
 
 	respStr := getAcessToken(authCode, appKey, appSecret, redirectUri)

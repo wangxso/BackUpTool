@@ -8,6 +8,5 @@ import (
 )
 
 func TestReader(t *testing.T) {
-	conf := config.Reader()
-	log.Fatalf("Config is %v", conf)
+	log.Fatalf("Config is %v", config.BackUpConfig)
 }

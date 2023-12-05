@@ -11,10 +11,14 @@ import (
 
 	"github.com/cheggaaa/pb/v3"
 	"github.com/sirupsen/logrus"
+	"github.com/wangxso/backuptool/db"
 	openapiclient "github.com/wangxso/backuptool/openxpanapi"
 )
 
 type FileReturn struct {
+	TkbindId       int    `json:"tkbind_id"`
+	OwnerType      int    `json:"owner_type"`
+	RealCategory   string `json:"real_category"`
 	ServerFileName string `json:"server_filename"`
 	Privacy        int    `json:"privacy"`
 	Category       int    `json:"category"`
@@ -32,6 +36,7 @@ type FileReturn struct {
 	ServerMtime    int64  `json:"server_mtime"`
 	Empty          int    `json:"empty"`
 	OperId         int64  `json:"oper_id"`
+	MD5            string `json:"md5"`
 }
 
 type FileListReturn struct {
@@ -62,14 +67,11 @@ func (pw *ProgressWriter) DisplayProgress() {
 	logrus.Infof("下载进度: %.2f%%\r", progress)
 }
 
-func GetFileList(accessToken string) FileListReturn {
-	folder := "0"       // string |  (optional)
-	web := "web"        // string |  (optional)
-	start := "0"        // string |  (optional)
-	limit := int32(2)   // int32 |  (optional)
-	dir := "/来自：back设备" // string |  (optional)
-	order := "time"     // string |  (optional)
-	desc := int32(1)    // int32 |  (optional)
+// GetFileList
+// dir: /来自：back设备
+// limit: int; desc int; order string(time); start string("0");forlder string("0");
+func GetFileList(accessToken, dir, order, start, folder string, limit, desc int32) FileListReturn {
+	web := "web" // string |  (optional)
 
 	configuration := openapiclient.NewConfiguration()
 	api_client := openapiclient.NewAPIClient(configuration)
@@ -118,28 +120,37 @@ func GetDlink(accessToken string, fsids []uint64) ([]map[string]string, error) {
 	return dlinks, nil
 }
 
-func Download(fileURL, filename, targetPaths string) {
+func Download(fid uint64, targetPath string) error {
+	redisCli := db.Client
+	accessToken, _ := redisCli.Get(redisCli.Context(), "AccessCode").Result()
 
+	dlink, err := GetDlink(accessToken, []uint64{fid})
+	if err != nil {
+		logrus.Error(err)
+		return err
+	}
+	uri := fmt.Sprintf("%s&access_token=%s", dlink[0]["dlink"], accessToken)
+	filename := dlink[0]["filename"]
 	// 发起HTTP GET请求
-	resp, err := http.Get(fileURL)
+	resp, err := http.Get(uri)
 	if err != nil {
 		logrus.Error("无法下载文件:", err)
-		return
+		return err
 	}
 	defer resp.Body.Close()
 
 	// 检查HTTP响应状态码
 	if resp.StatusCode != http.StatusOK {
 		logrus.Error("下载请求失败:", resp.Status)
-		return
+		return err
 	}
 
 	// 创建保存文件的本地文件
-	filename = fmt.Sprintf("%s/%s", targetPaths, filename)
+	filename = fmt.Sprintf("%s/%s", targetPath, filename)
 	out, err := os.Create(filename) // 替换为您要保存的本地文件路径
 	if err != nil {
 		logrus.Error("无法创建文件:", err)
-		return
+		return err
 	}
 	defer out.Close()
 	fileSize := resp.ContentLength
@@ -164,4 +175,5 @@ func Download(fileURL, filename, targetPaths string) {
 	}
 	// 完成进度条
 	progressBar.Finish()
+	return nil
 }

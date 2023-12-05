@@ -26,9 +26,9 @@ type ListInfo struct {
 	Dlink       string            `json:"dlink"` // 文件才返回dlink
 	Duration    int               `json:"duration"`
 	Thumbs      map[string]string `json:"thumbs"`
-	Height      int               `json:"height"`
-	Width       int               `json:"width"`
-	DateTaken   int               `json:"date_taken"`
+	// Height      int               `json:"height"`
+	// Width       int               `json:"width"`
+	// DateTaken   int               `json:"date_taken"`
 }
 
 type FileMetasReturn struct {

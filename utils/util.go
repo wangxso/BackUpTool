@@ -2,10 +2,14 @@ package utils
 
 import (
 	"bytes"
+	"crypto/md5"
 	"crypto/tls"
+	"encoding/hex"
 	"io"
 	"io/ioutil"
 	"net/http"
+	"os"
+	"path/filepath"
 	"time"
 )
 
@@ -15,6 +19,22 @@ type Request struct {
 	QueryArg interface{}
 	Body     interface{}
 	Headers  map[string]string
+}
+
+func CalculateMD5(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	hash := md5.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return "", err
+	}
+
+	md5sum := hex.EncodeToString(hash.Sum(nil))
+	return md5sum, nil
 }
 
 func DoHTTPRequest(url string, body io.Reader, headers map[string]string) (string, int, error) {
@@ -128,4 +148,27 @@ func Do2HTTPRequest(url string, body io.Reader, headers map[string]string) (stri
 		return "", resp.StatusCode, err
 	}
 	return string(respBody), resp.StatusCode, nil
+}
+
+func isDir(path string) bool {
+	fileInfo, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+
+	return fileInfo.IsDir()
+}
+
+func GetRelativeSubdirectory(sourcePath string, targetPath string) (string, error) {
+	targetDir := targetPath
+	if !isDir(targetPath) {
+		targetDir = filepath.Dir(targetPath)
+	}
+
+	relPath, err := filepath.Rel(sourcePath, targetDir)
+	if err != nil {
+		return "", err
+	}
+
+	return relPath, nil
 }

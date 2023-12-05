@@ -6,12 +6,12 @@ import (
 	"io"
 	"net/url"
 
+	"github.com/sirupsen/logrus"
 	utils "github.com/wangxso/backuptool/utils"
 )
 
 func FileMetas(accessToken string, arg *FileMetasArg) (FileMetasReturn, error) {
-	ret := FileMetasReturn{}
-
+	var ret FileMetasReturn
 	protocal := "https"
 	host := "pan.baidu.com"
 	router := "/rest/2.0/xpan/multimedia?method=filemetas&"
@@ -42,6 +42,7 @@ func FileMetas(accessToken string, arg *FileMetasArg) (FileMetasReturn, error) {
 		return ret, err
 	}
 	if err = json.Unmarshal([]byte(body), &ret); err != nil {
+		logrus.Error("[msg: unmarshal filemetas body failed] err:", err.Error())
 		return ret, errors.New("unmarshal filemetas body failed,body")
 	}
 	if ret.Errno != 0 {
