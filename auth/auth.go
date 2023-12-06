@@ -9,6 +9,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/wangxso/backuptool/config"
 	"github.com/wangxso/backuptool/db"
 	openapiclient "github.com/wangxso/backuptool/openxpanapi"
@@ -70,8 +71,7 @@ func Login() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
+	logrus.Info("Login Success AccessCode: ", resp.AccessToken)
 	db.Client.Set(ctx, "AccessCode", resp.AccessToken, AccessCodeValidity)
 	db.Client.Set(ctx, "RefreshCode", resp.RefreshToken, AccessCodeValidity*2)
-
 }

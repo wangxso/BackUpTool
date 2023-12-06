@@ -2,9 +2,11 @@ BaiduDisk:
   AppKey: ""
   SecretKey: ""
   RedirectUri: ""
+  syncDir: ""
 
 General:
   debug: false
+  syncDir: ""
   tmpDir: /var/tmp
 
 Redis:

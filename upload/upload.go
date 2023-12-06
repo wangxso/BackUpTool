@@ -190,6 +190,7 @@ func Upload(targetPath, sourcePath string) {
 	blockList, size, err := spiltFile(sourcePath)
 	if err != nil {
 		logrus.Error("[UploadSpiltFile]", err)
+		panic(err.Error())
 	}
 
 	// Convert the blockList to JSON and store it as a string
@@ -197,6 +198,7 @@ func Upload(targetPath, sourcePath string) {
 	blockListStr := string(blockListByte)
 	if err != nil {
 		logrus.Error("[BlockListMarshal] ", err)
+		panic(err.Error())
 	}
 
 	// Pre-create the upload
@@ -226,6 +228,7 @@ func Upload(targetPath, sourcePath string) {
 		if err != nil {
 			slicePath := fmt.Sprintf("%s.%d", path.Base(sourcePath), i)
 			deleteChunks(slicePath)
+			panic(err.Error())
 		}
 	}
 
