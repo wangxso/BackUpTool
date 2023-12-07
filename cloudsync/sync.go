@@ -21,22 +21,22 @@ func SyncFolder() error {
 	fidMap := make(map[string]uint64)
 	redisCli := db.Client
 	accessToken, _ := redisCli.Get(redisCli.Context(), "AccessCode").Result()
-	resp := download.GetFileList(accessToken, targetFolder, "time", "0", "0", 10, 1)
+	// 获取云端文件
+	resp := download.GetMultiFileList(accessToken, targetFolder, 1, "time", 0, 0, 1000)
 
 	couldMd5FileMap := make(map[string]string)
-	if resp.ErrorNo != -9 {
+	if resp.Errno != -9 {
 		cloudFileList := resp.List
 		for _, v := range cloudFileList {
-			couldMd5FileMap[v.ServerFileName] = v.MD5
-			fidMap[v.ServerFileName] = uint64(v.FsId)
-			logrus.Info("filename: ", v.ServerFileName, " md5: ", v.MD5)
+			couldMd5FileMap[v.ServerFilename] = v.MD5
+			fidMap[v.ServerFilename] = uint64(v.FsID)
 		}
 	}
-
-	if resp.ErrorNo != 0 && resp.ErrorNo != -9 {
-		logrus.Error("ErrorNo: ", resp.ErrorNo)
-		logrus.Error("ErrorMsg: ", resp.RequestId)
-		return errors.New("ErrorNo: " + fmt.Sprint(resp.ErrorNo) + " RequestId: " + fmt.Sprint(resp.RequestId))
+	// 31066错误为文件不存在
+	if resp.Errno != 0 && resp.Errno != 31066 {
+		logrus.Error("ErrorNo: ", resp.Errmsg)
+		logrus.Error("ErrorMsg: ", resp.RequestID)
+		return errors.New("ErrorNo: " + fmt.Sprint(resp.Errno) + " Errormsg: " + fmt.Sprint(resp.Errmsg))
 	}
 
 	// 找到sourceFolder下的所有文件
@@ -56,25 +56,27 @@ func SyncFolder() error {
 
 		filename := info.Name()
 		relativePath, err := utils.GetRelativeSubdirectory(sourceFolder, path)
-		// sourceMD5, err := calculateMD5(filepath.Join(dir, filename))
 		if err != nil {
 			logrus.Error(err)
 			return err
 		}
+		sourceMD5, _ := utils.CalculateMD5(path)
 		sourceFileMap[filename] = "true"
 		// 对比目录差异
 		// 不在云端的上传
 		if relativePath == "." {
 			relativePath = ""
 		}
+
 		if _, ok := couldMd5FileMap[filename]; !ok {
-			// 下载文件
-			logrus.Info("Start Sync File(Upload): ", relativePath+filename)
+			// 上传文件
+			logrus.Info("Start Sync File(Upload): ", filepath.Join(relativePath, filename))
 
 			uploadPath := filepath.Join(targetFolder, filepath.Join(relativePath, filename))
 			upload.Upload(uploadPath, path)
+		} else {
+			logrus.Info("filename: ", filename, " md5: ", sourceMD5, " File Exsist, Skip Upload")
 		}
-
 		return nil
 	})
 
@@ -86,7 +88,7 @@ func SyncFolder() error {
 	// 下载本地没有的文件
 	for path := range couldMd5FileMap {
 		if _, ok := sourceFileMap[path]; !ok {
-			logrus.Infof("Source File Name [%s]", path)
+			logrus.Infof("Download Source File Name [%s]", path)
 			download.Download(fidMap[path], sourceFolder)
 		}
 	}

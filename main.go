@@ -3,7 +3,9 @@ package main
 import (
 	"flag"
 
-	"github.com/wangxso/backuptool/auth"
+	"net/http"
+	_ "net/http/pprof"
+
 	clousync "github.com/wangxso/backuptool/cloudsync"
 	"github.com/wangxso/backuptool/config"
 	"github.com/wangxso/backuptool/db"
@@ -28,18 +30,21 @@ func init() {
 
 func main() {
 	defer handler.HandlerGlobalErrors()
-
-	flag.Parse()
+	go func() {
+		http.ListenAndServe("localhost:6060", nil)
+	}()
+	// flag.Parse()
 	config.LoadConfig(DEFAULT_CONFIG_PATH)
 	db.LoadRedis()
-	// 登录模式
-	if authFlag {
-		auth.Login()
-		return
-	}
-	// 同步模式
-	if syncFlag {
-		clousync.SyncFolder()
-		return
-	}
+	// // 登录模式
+	// if authFlag {
+	// 	auth.Login()
+	// 	return
+	// }
+	// // 同步模式
+	// if syncFlag {
+	// 	clousync.SyncFolder()
+	// 	return
+	// }
+	clousync.SyncFolder()
 }

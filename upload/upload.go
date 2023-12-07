@@ -10,13 +10,14 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"path"
+	"path/filepath"
 	"strconv"
 
 	"github.com/sirupsen/logrus"
 	"github.com/wangxso/backuptool/config"
 	"github.com/wangxso/backuptool/db"
 	openapiclient "github.com/wangxso/backuptool/openxpanapi"
+	"github.com/wangxso/backuptool/utils"
 )
 
 const (
@@ -32,16 +33,30 @@ type precreateReturnType struct {
 	RequestID  int64         `json:"request_id"`
 }
 
+type createFileReturnType struct {
+	Errno          int    `json:"errno"`
+	FsID           int64  `json:"fs_id"`
+	MD5            string `json:"md5"`
+	ServerFilename string `json:"server_filename"`
+	Category       int    `json:"category"`
+	Path           string `json:"path"`
+	Size           int    `json:"size"`
+	Ctime          int64  `json:"ctime"`
+	Mtime          int64  `json:"mtime"`
+	IsDir          int    `json:"isdir"`
+	Name           string `json:"name"`
+}
+
 func PreCreateUpload(accessToken string, path string, isdir int32, size int32, autoinit int32, blockList string, rtype int32) precreateReturnType {
 	configuration := openapiclient.NewConfiguration()
 	api_client := openapiclient.NewAPIClient(configuration)
-	resp, r, err := api_client.FileuploadApi.Xpanfileprecreate(context.Background()).AccessToken(accessToken).Path(path).Isdir(isdir).Size(size).Autoinit(autoinit).BlockList(blockList).Rtype(rtype).Execute()
+	_, r, err := api_client.FileuploadApi.Xpanfileprecreate(context.Background()).AccessToken(accessToken).Path(path).Isdir(isdir).Size(size).Autoinit(autoinit).BlockList(blockList).Rtype(rtype).Execute()
 	if err != nil {
 		logrus.Error("Error when calling `FileuploadApi.Xpanfileprecreate``: ", err)
 		logrus.Error("Full HTTP response: ", r)
 	}
 	// response from `Xpanfileprecreate`: Fileprecreateresponse
-	logrus.Info("Response from `FileuploadApi.Xpanfileprecreate`: ", resp)
+	// logrus.Info("Response from `FileuploadApi.Xpanfileprecreate`: ", resp)
 
 	bodyBytes, err := ioutil.ReadAll(r.Body)
 	if err != nil {
@@ -59,49 +74,55 @@ func UploadSlice(accessToken string, partseq string, path_ string, uploadid stri
 	configuration := openapiclient.NewConfiguration()
 	//configuration.Debug = true
 	api_client := openapiclient.NewAPIClient(configuration)
-	resp, r, err := api_client.FileuploadApi.Pcssuperfile2(context.Background()).AccessToken(accessToken).Partseq(partseq).Path(path_).Uploadid(uploadid).Type_(type_).File(file).Execute()
+	_, r, err := api_client.FileuploadApi.Pcssuperfile2(context.Background()).AccessToken(accessToken).Partseq(partseq).Path(path_).Uploadid(uploadid).Type_(type_).File(file).Execute()
 	if err != nil {
 		logrus.Error("Error when calling `FileuploadApi.Pcssuperfile2``: ", err)
 		logrus.Error("Full HTTP response: ", r)
 	}
 	// response from `Pcssuperfile2`: string
-	logrus.Info("Response from `FileuploadApi.Pcssuperfile2`: ", resp)
+	// logrus.Info("Response from `FileuploadApi.Pcssuperfile2`: ", resp)
 
 	_, err = io.ReadAll(r.Body)
 	if err != nil {
 		logrus.Error("err: ", r)
 	}
-	defer deleteOneChunks(path.Base(path_))
+	defer deleteOneChunks(filepath.Base(path_))
 	return err
 }
 
-func UploadCreate(accessToken string, path string, isdir int32, size int32, uploadid string, blockList string, rtype int32) {
+func UploadCreate(accessToken string, path string, isdir int32, size int32, uploadid string, blockList string, rtype int32) createFileReturnType {
 	configuration := openapiclient.NewConfiguration()
 	api_client := openapiclient.NewAPIClient(configuration)
-	resp, r, err := api_client.FileuploadApi.Xpanfilecreate(context.Background()).AccessToken(accessToken).Path(path).Isdir(isdir).Size(size).Uploadid(uploadid).BlockList(blockList).Rtype(rtype).Execute()
+	_, r, err := api_client.FileuploadApi.Xpanfilecreate(context.Background()).AccessToken(accessToken).Path(path).Isdir(isdir).Size(size).Uploadid(uploadid).BlockList(blockList).Rtype(rtype).Execute()
 	if err != nil {
 		logrus.Error("Error when calling `FileuploadApi.Xpanfilecreate``: ", err)
 		logrus.Error("Full HTTP response: ", r)
 	}
 	// response from `Xpanfilecreate`: Filecreateresponse
-	logrus.Info("Response from `FileuploadApi.Xpanfilecreate`: ", resp)
+	// logrus.Info("Response from `FileuploadApi.Xpanfilecreate`: ", resp)
 
 	bodyBytes, err := io.ReadAll(r.Body)
 	if err != nil {
 		logrus.Error("err: ", r)
 	}
 
-	fmt.Println(string(bodyBytes))
+	var response createFileReturnType
+	err = json.Unmarshal(bodyBytes, &response)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return response
 }
 
-func spiltFile(filepath string) ([]string, int, error) {
-	file, err := os.Open(filepath)
+func spiltFile(filePath string) ([]string, int, error) {
+	file, err := os.Open(filePath)
 	blockList := make([]string, 0)
 	if err != nil {
 		return nil, 0, err
 	}
 	stat, _ := file.Stat()
 	size := stat.Size()
+	filename := stat.Name()
 	buffer := make([]byte, chunkSize)
 	chunkCount := 0
 	for {
@@ -112,8 +133,8 @@ func spiltFile(filepath string) ([]string, int, error) {
 			}
 			return nil, int(size), err
 		}
-		chunkFileName := fmt.Sprintf("%s.%d", path.Base(filepath), chunkCount)
-		chunkFilePath := path.Join(config.BackUpConfig.General.TmpDir, chunkFileName)
+		chunkFileName := fmt.Sprintf("%s.%d", filename, chunkCount)
+		chunkFilePath := filepath.Join(config.BackUpConfig.General.TmpDir, chunkFileName)
 		chunkFile, err := os.Create(chunkFilePath)
 		if err != nil {
 			return nil, int(size), err
@@ -134,7 +155,7 @@ func spiltFile(filepath string) ([]string, int, error) {
 func deleteOneChunks(fileName string) error {
 
 	// 构造分片文件名
-	chunkFilePath := path.Join(config.BackUpConfig.General.TmpDir, fileName)
+	chunkFilePath := filepath.Join(config.BackUpConfig.General.TmpDir, fileName)
 	// logrus.Info("delete file", chunkFileName)
 	// 尝试删除分片文件
 	err := os.Remove(chunkFilePath)
@@ -151,7 +172,7 @@ func deleteChunks(fileName string) error {
 	for {
 		// 构造分片文件名
 		chunkFileName := fmt.Sprintf("%s.%d", fileName, chunkCount)
-		chunkFilePath := path.Join(config.BackUpConfig.General.TmpDir, chunkFileName)
+		chunkFilePath := filepath.Join(config.BackUpConfig.General.TmpDir, chunkFileName)
 		// logrus.Info("delete file", chunkFileName)
 		// 尝试删除分片文件
 		err := os.Remove(chunkFilePath)
@@ -209,8 +230,8 @@ func Upload(targetPath, sourcePath string) {
 	// Upload each slice of the file
 	for i := 0; i < len(blockList); i++ {
 		go func(sliceIndex int) {
-			slicePath := fmt.Sprintf("%s.%d", path.Base(sourcePath), sliceIndex)
-			slicePath = path.Join(config.BackUpConfig.General.TmpDir, slicePath)
+			slicePath := fmt.Sprintf("%s.%d", filepath.Base(sourcePath), sliceIndex)
+			slicePath = filepath.Join(config.BackUpConfig.General.TmpDir, slicePath)
 			file, err := os.Open(slicePath)
 			if err != nil {
 				uploadResultChan <- err
@@ -226,14 +247,18 @@ func Upload(targetPath, sourcePath string) {
 	for i := 0; i < len(blockList); i++ {
 		err := <-uploadResultChan
 		if err != nil {
-			slicePath := fmt.Sprintf("%s.%d", path.Base(sourcePath), i)
+			slicePath := fmt.Sprintf("%s.%d", filepath.Base(sourcePath), i)
 			deleteChunks(slicePath)
 			panic(err.Error())
 		}
 	}
 
-	UploadCreate(accessCode, targetPath, isDir, int32(size), preCreateResp.Uploadid, blockListStr, 3)
-
+	resp := UploadCreate(accessCode, targetPath, isDir, int32(size), preCreateResp.Uploadid, blockListStr, 3)
+	if resp.Errno == 0 {
+		// 上传成功
+		uploadFileMD5, _ := utils.CalculateMD5(sourcePath)
+		redisCli.Set(redisCli.Context(), resp.MD5, uploadFileMD5, 0)
+	}
 	// Clean up the chunks
-	defer deleteChunks(path.Base(sourcePath))
+	defer deleteChunks(filepath.Base(sourcePath))
 }
