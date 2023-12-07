@@ -12,7 +12,6 @@ config.yaml
 
 # 忽略依赖管理生成的目录
 /vendor/
-/go.sum
 
 # 忽略IDE和编辑器生成的文件和目录
 .idea/
