@@ -40,7 +40,7 @@ jobs:
         prerelease: false
     # Go build exe 命令
     - name: Build exe
-      run: go build -o switchENV.exe
+      run: go build -o backuptool.exe
       env:
         GOOS: ${{ matrix.goos }}
         GOARCH: ${{ matrix.goarch }}
@@ -48,7 +48,7 @@ jobs:
     
     # exe文件压缩一下 减少体积
     - name: Packaging...
-      run: tar czf switchENV-${{ matrix.goos }}-${{ steps.get_version.outputs.VERSION }}.tgz switchENV.exe
+      run: tar czf backuptool-${{ matrix.goos }}-${{ steps.get_version.outputs.VERSION }}.tgz backuptool.exe
       
     # 上传到release-asset 用户就可以在release页面下载了
     - name: Uploading assets...
