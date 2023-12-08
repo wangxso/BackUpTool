@@ -156,7 +156,7 @@ func GetDlink(accessToken string, fsids []uint64) ([]map[string]string, error) {
 		return nil, err
 	} else {
 		// fmt.Printf("ret:%+v", ret)
-		// fmt.Printf("ret.List:%+v", ret.List)
+		logrus.Infof("ret.List:%+v", ret.List)
 		// 获取list的第一个元素的dlink示例
 		for _, v := range ret.List {
 			item := make(map[string]string, 0)
