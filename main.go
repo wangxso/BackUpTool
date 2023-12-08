@@ -6,7 +6,6 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 
-	"github.com/wangxso/backuptool/auth"
 	clousync "github.com/wangxso/backuptool/cloudsync"
 	"github.com/wangxso/backuptool/config"
 	"github.com/wangxso/backuptool/db"
@@ -37,14 +36,15 @@ func main() {
 	flag.Parse()
 	config.LoadConfig(DEFAULT_CONFIG_PATH)
 	db.LoadRedis()
-	// 登录模式
-	if authFlag {
-		auth.Login()
-		return
-	}
-	// 同步模式
-	if syncFlag {
-		clousync.SyncFolder()
-		return
-	}
+	clousync.SyncFolder()
+	// // 登录模式
+	// if authFlag {
+	// 	auth.Login()
+	// 	return
+	// }
+	// // 同步模式
+	// if syncFlag {
+	// 	clousync.SyncFolder()
+	// 	return
+	// }
 }
