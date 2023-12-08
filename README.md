@@ -31,6 +31,7 @@ go mod tidy
 - [ ] Rewrite the same file check algorithm
 - [ ] Resumable transfer
 - [ ] Error Handler, import reliability.
+- [ ] Small file(<4MB) using alone API
 
 
 https://pan.baidu.com/union/doc/Zl0jb6i29
