@@ -4,6 +4,7 @@
 
 
 # How To Run?
+0. Require `Redis`, Please Install it first.
 1. Get the `config.template.yaml` and rename to `config.yaml`
 2. Download Release File and copy `config.yaml` and `Backuptool` into same folder
 3. Run backuptool such as
