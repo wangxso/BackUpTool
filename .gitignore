@@ -30,3 +30,5 @@ Thumbs.db
 # 忽略编译后产物
 backuptool
 app
+
+/*.log
