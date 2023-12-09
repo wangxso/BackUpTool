@@ -31,3 +31,10 @@ func LoadRedis() {
 	}
 	logrus.Info("Connect to Redis successfully")
 }
+
+func CloseRedis() {
+	err := Client.Close()
+	if err != nil {
+		logrus.Error(err)
+	}
+}

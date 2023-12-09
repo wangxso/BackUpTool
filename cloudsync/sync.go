@@ -1,4 +1,4 @@
-package clousync
+package cloudsync
 
 import (
 	"errors"
@@ -6,8 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"sync"
 
+	"github.com/karrick/godirwalk"
 	"github.com/sirupsen/logrus"
 	"github.com/wangxso/backuptool/config"
 	"github.com/wangxso/backuptool/db"
@@ -19,6 +19,7 @@ import (
 const (
 	DOWNLOAD_PATHS = "download_paths"
 	UPLOAD_PATHS   = "upload_paths"
+	MD5_FILE_MAP   = "md5_file_map"
 )
 
 // SyncFolder synchronizes the source folder with the target folder in the BaiduDisk cloud storage.
@@ -71,10 +72,6 @@ func SyncFolder() error {
 	// 递归遍历文件
 	sourceFileMap := make(map[string]string)
 
-	// 初始化所需的变量和锁
-	var wg sync.WaitGroup
-	// var mu sync.Mutex
-
 	// 计算所有需要上传的文件path
 	err := filepath.Walk(sourceFolder, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -86,34 +83,33 @@ func SyncFolder() error {
 			return nil // 继续遍历子目录
 		}
 		waitingCount++
-		wg.Add(1)
-		go func(path string) {
-			defer wg.Done()
-			filename := info.Name()
-			relativePath, err := utils.GetRelativeSubdirectory(sourceFolder, path)
-			if err != nil {
-				logrus.Error(err)
-			}
-			sourceMD5, _ := utils.CalculateMD5(path)
-			sourceFileMap[filename] = "true"
-			// 对比目录差异
-			// 不在云端的上传
-			if relativePath == "." {
-				relativePath = ""
-			}
+		filename := info.Name()
+		relativePath, err := utils.GetRelativeSubdirectory(sourceFolder, path)
+		if err != nil {
+			logrus.Error(err)
+		}
+		sourceMD5, _ := utils.CalculateMD5(path)
+		sourceFileMap[filename] = "true"
+		// 对比目录差异
+		// 不在云端的上传
+		if relativePath == "." {
+			relativePath = ""
+		}
 
-			// if _, ok := couldMd5FileMap[filename]; !ok {
-			// 上传文件
-			cloudMD5 := couldMd5FileMap[filename]
-			targetMD5, _ := redisCli.Get(redisCli.Context(), cloudMD5).Result()
-			if sourceMD5 != targetMD5 {
-				logrus.Info("filename: ", filename, " md5: ", sourceMD5, " Upload File")
-				// upload.Upload(relativePath, path)
-				redisCli.HSet(redisCli.Context(), DOWNLOAD_PATHS, relativePath, false)
-			} else {
-				logrus.Info("filename: ", filename, " md5: ", sourceMD5, " File Exsist, Skip Upload")
+		// if _, ok := couldMd5FileMap[filename]; !ok {
+		// 上传文件
+		cloudMD5 := couldMd5FileMap[filename]
+		targetMD5, _ := redisCli.HGet(redisCli.Context(), UPLOAD_PATHS, cloudMD5).Result()
+		if sourceMD5 != targetMD5 {
+			logrus.Info("filename: ", filename, " md5: ", sourceMD5, " Upload File")
+			respMD5, err := upload.Upload(relativePath, path)
+			if err != nil {
+				panic(err)
 			}
-		}(path)
+			redisCli.HSet(redisCli.Context(), UPLOAD_PATHS, respMD5, sourceMD5)
+		} else {
+			logrus.Info("filename: ", filename, " md5: ", sourceMD5, " File Exsist, Skip Upload")
+		}
 		if err != nil {
 			return err
 		}
@@ -124,7 +120,6 @@ func SyncFolder() error {
 		logrus.Error("Error reading directory: ", err)
 		return errors.New("Error reading directory: " + err.Error())
 	}
-	wg.Wait()
 	// 下载本地没有的文件
 	for path := range couldMd5FileMap {
 		if _, ok := sourceFileMap[path]; !ok {
@@ -163,4 +158,31 @@ func SyncFolder() error {
 
 	logrus.Info("Waiting Count: ", waitingCount, " Upload Count: ", uploadCount, " Download Count: ", downloadCount, " Skip Count: ", skipCount, " CloudFile Count: ", len(couldMd5FileMap))
 	return nil
+}
+
+func CacheFileMD5Map() {
+	logrus.Info("Start Cache File MD5 and it may cost some time, Please waiting")
+	dir := config.BackUpConfig.General.SyncDir // 要遍历的目录路径
+	redisCli := db.Client
+	err := godirwalk.Walk(dir, &godirwalk.Options{
+		Callback: func(path string, de *godirwalk.Dirent) error {
+			if !de.IsDir() {
+				md5, err := utils.CalculateMD5(path)
+				if err != nil {
+					fmt.Print(err)
+				}
+				redisCli.HSet(redisCli.Context(), MD5_FILE_MAP, path, md5)
+				logrus.Info(path, " md5: ", md5) // 输出文件路径
+			}
+			return nil
+		},
+		ErrorCallback: func(path string, err error) godirwalk.ErrorAction {
+			logrus.Errorf("Error walking %s: %v\n", path, err)
+			return godirwalk.SkipNode
+		},
+	})
+
+	if err != nil {
+		logrus.Errorf("Error walking directory: %v\n", err)
+	}
 }

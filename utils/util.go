@@ -3,7 +3,9 @@ package utils
 import (
 	"bytes"
 	"crypto/md5"
+	"crypto/rand"
 	"crypto/tls"
+	"encoding/binary"
 	"encoding/hex"
 	"io"
 	"io/ioutil"
@@ -26,13 +28,28 @@ func CalculateMD5(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer file.Close()
-
-	hash := md5.New()
-	if _, err := io.Copy(hash, file); err != nil {
+	defer func(file *os.File) {
+		err := file.Close()
+		if err != nil {
+			return
+		}
+	}(file)
+	size := 4096
+	stat, err := file.Stat()
+	if int(stat.Size()) < size {
+		size = int(stat.Size())
+	}
+	if err != nil {
 		return "", err
 	}
+	buffer := make([]byte, size)
+	_, err = io.ReadFull(file, buffer)
 
+	if err != nil {
+		return "", err
+	}
+	hash := md5.New()
+	hash.Write(buffer)
 	md5sum := hex.EncodeToString(hash.Sum(nil))
 	return md5sum, nil
 }
@@ -171,4 +188,13 @@ func GetRelativeSubdirectory(sourcePath string, targetPath string) (string, erro
 	}
 
 	return relPath, nil
+}
+
+func GenerateRequestID() (uint64, error) {
+	var id uint64
+	err := binary.Read(rand.Reader, binary.BigEndian, &id)
+	if err != nil {
+		return 0, err
+	}
+	return id, nil
 }

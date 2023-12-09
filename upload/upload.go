@@ -12,12 +12,12 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync"
 
 	"github.com/sirupsen/logrus"
 	"github.com/wangxso/backuptool/config"
 	"github.com/wangxso/backuptool/db"
 	openapiclient "github.com/wangxso/backuptool/openxpanapi"
-	"github.com/wangxso/backuptool/utils"
 )
 
 const (
@@ -196,7 +196,7 @@ func deleteChunks(fileName string) error {
 // - targetPath: the path where the file will be uploaded.
 // - sourcePath: the path of the file to be uploaded.
 // Return type(s): None.
-func Upload(targetPath, sourcePath string) {
+func Upload(targetPath, sourcePath string) (string, error) {
 	// Get the Redis client from the db package
 	redisCli := db.Client
 
@@ -224,41 +224,75 @@ func Upload(targetPath, sourcePath string) {
 
 	// Pre-create the upload
 	preCreateResp := PreCreateUpload(accessCode, targetPath, isDir, int32(size), autoInit, string(blockListStr), 3)
-	// Create a channel to receive upload results
-	uploadResultChan := make(chan error)
-
 	// Upload each slice of the file
-	for i := 0; i < len(blockList); i++ {
-		go func(sliceIndex int) {
-			slicePath := fmt.Sprintf("%s.%d", filepath.Base(sourcePath), sliceIndex)
-			slicePath = filepath.Join(config.BackUpConfig.General.TmpDir, slicePath)
-			file, err := os.Open(slicePath)
-			if err != nil {
-				uploadResultChan <- err
-				return
-			}
-			err = UploadSlice(accessCode, strconv.Itoa(sliceIndex), targetPath, preCreateResp.Uploadid, "tmpfile", file)
-			// Create the final upload
-			uploadResultChan <- err
-		}(i)
-	}
+	// for i := 0; i < len(blockList); i++ {
+	// 	slicePath := fmt.Sprintf("%s.%d", filepath.Base(sourcePath), i)
+	// 	slicePath = filepath.Join(config.BackUpConfig.General.TmpDir, slicePath)
+	// 	file, err := os.Open(slicePath)
+	// 	if err != nil {
+	// 		panic(err.Error())
+	// 	}
+	// 	err = UploadSlice(accessCode, strconv.Itoa(i), targetPath, preCreateResp.Uploadid, "tmpfile", file)
+	// 	if err != nil {
+	// 		panic(err.Error())
+	// 	}
+	// 	// Create the final upload
+	// 	logrus.Infof("[UploadSlice] %d/%d", i, len(blockList))
+	// }
 
-	// Wait for all uploads to complete
+	// resp := UploadCreate(accessCode, targetPath, isDir, int32(size), preCreateResp.Uploadid, blockListStr, 3)
+	// if resp.Errno == 0 {
+	// 	// 上传成功
+	// 	return resp.MD5, err
+	// }
+	var wg sync.WaitGroup
+	errChan := make(chan error, len(blockList))
 	for i := 0; i < len(blockList); i++ {
-		err := <-uploadResultChan
+		slicePath := fmt.Sprintf("%s.%d", filepath.Base(sourcePath), i)
+		slicePath = filepath.Join(config.BackUpConfig.General.TmpDir, slicePath)
+
+		wg.Add(1)
+		go UploadSliceAsync(&wg, accessCode, targetPath, preCreateResp.Uploadid, slicePath, i, len(blockList), errChan)
+	}
+	go func() {
+		wg.Wait()
+		close(errChan)
+	}()
+
+	var uploadErr error
+	for err := range errChan {
 		if err != nil {
-			slicePath := fmt.Sprintf("%s.%d", filepath.Base(sourcePath), i)
-			deleteChunks(slicePath)
-			panic(err.Error())
+			uploadErr = err
+			break
 		}
 	}
 
 	resp := UploadCreate(accessCode, targetPath, isDir, int32(size), preCreateResp.Uploadid, blockListStr, 3)
 	if resp.Errno == 0 {
 		// 上传成功
-		uploadFileMD5, _ := utils.CalculateMD5(sourcePath)
-		redisCli.Set(redisCli.Context(), resp.MD5, uploadFileMD5, 0)
+		return resp.MD5, uploadErr
 	}
+
 	// Clean up the chunks
 	defer deleteChunks(filepath.Base(sourcePath))
+	return "", nil
+}
+
+func UploadSliceAsync(wg *sync.WaitGroup, accessCode, targetPath, uploadID, slicePath string, index int, length int, errChan chan<- error) {
+	defer wg.Done()
+
+	file, err := os.Open(slicePath)
+	if err != nil {
+		errChan <- err
+		return
+	}
+	defer file.Close()
+
+	err = UploadSlice(accessCode, strconv.Itoa(index), targetPath, uploadID, "tmpfile", file)
+	if err != nil {
+		errChan <- err
+		return
+	}
+
+	logrus.Infof("[UploadSlice] %d/%d\n", index, length)
 }
