@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 
 	"github.com/karrick/godirwalk"
 	"github.com/sirupsen/logrus"
@@ -101,8 +100,8 @@ func SyncFolder() error {
 		cloudMD5 := couldMd5FileMap[filename]
 		targetMD5, _ := redisCli.HGet(redisCli.Context(), UPLOAD_PATHS, cloudMD5).Result()
 		if sourceMD5 != targetMD5 {
-			logrus.Info("filename: ", filename, " md5: ", sourceMD5, " Upload File")
-			respMD5, err := upload.Upload(relativePath, path)
+			logrus.Info("filename: ", filepath.Join(targetFolder, relativePath, filename), " md5: ", sourceMD5, " Upload File")
+			respMD5, err := upload.Upload(filepath.Join(targetFolder, relativePath, filename), path)
 			if err != nil {
 				panic(err)
 			}
@@ -127,35 +126,6 @@ func SyncFolder() error {
 			redisCli.HSet(redisCli.Context(), DOWNLOAD_PATHS, fidMap[path], false)
 		}
 	}
-	// 上传或者下载这些文件
-	// 上传
-	for path := range redisCli.HGetAll(redisCli.Context(), UPLOAD_PATHS).Val() {
-		if redisCli.HGet(redisCli.Context(), UPLOAD_PATHS, path).Val() == "false" {
-			uploadCount++
-			logrus.Infof("Upload Source File Name [%s]", path)
-			if err != nil {
-				return err
-			}
-			upload.Upload(path, sourceFolder)
-			uploadCount++
-			redisCli.HSet(redisCli.Context(), UPLOAD_PATHS, path, true)
-		}
-	}
-	// 下载
-	for path := range redisCli.HGetAll(redisCli.Context(), DOWNLOAD_PATHS).Val() {
-		if redisCli.HGet(redisCli.Context(), DOWNLOAD_PATHS, path).Val() == "false" {
-			uploadCount++
-			logrus.Infof("Upload Source File Name [%s]", path)
-			fid, err := strconv.ParseUint(path, 10, 64)
-			if err != nil {
-				return err
-			}
-			download.Download(fid, sourceFolder)
-			downloadCount++
-			redisCli.HSet(redisCli.Context(), DOWNLOAD_PATHS, path, true)
-		}
-	}
-
 	logrus.Info("Waiting Count: ", waitingCount, " Upload Count: ", uploadCount, " Download Count: ", downloadCount, " Skip Count: ", skipCount, " CloudFile Count: ", len(couldMd5FileMap))
 	return nil
 }
