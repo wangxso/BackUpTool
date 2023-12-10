@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	_ "net/http/pprof"
 	"os"
 
@@ -18,20 +19,20 @@ const (
 func main() {
 	defer handler.HandlerGlobalErrors()
 	defer db.CloseRedis()
+	// 创建一个新的日志记录器实例
+	logger := logrus.New()
 	// 创建日志文件
 	logFile, err := os.OpenFile("app.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
-		logrus.Fatal(err)
+		panic(err)
 	}
-	defer logFile.Close()
+	// 设置文件日志钩子为日志记录器的输出
+	logger.SetOutput(logFile)
+	logger.SetOutput(io.MultiWriter(os.Stdout, logFile))
 
-	// 设置 logrus 输出为文件
-	logrus.SetOutput(logFile)
+	// 创建一个控制台日志钩子
 
-	// 设置 logrus 格式
-	logrus.SetFormatter(&logrus.TextFormatter{
-		DisableColors: true,
-	})
+	// 设置控制台日志钩子为日志记录器的输出
 
 	config.LoadConfig(DEFAULT_CONFIG_PATH)
 	db.LoadRedis()
