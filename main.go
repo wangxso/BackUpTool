@@ -1,7 +1,6 @@
 package main
 
 import (
-	"io"
 	_ "net/http/pprof"
 	"os"
 
@@ -28,7 +27,6 @@ func main() {
 	}
 	// 设置文件日志钩子为日志记录器的输出
 	logger.SetOutput(logFile)
-	logger.SetOutput(io.MultiWriter(os.Stdout, logFile))
 
 	// 创建一个控制台日志钩子
 
