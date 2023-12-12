@@ -1,7 +1,6 @@
 package main
 
 import (
-	_ "net/http/pprof"
 	"os"
 
 	"github.com/sirupsen/logrus"
@@ -27,8 +26,6 @@ func main() {
 	}
 	// 设置文件日志钩子为日志记录器的输出
 	logger.SetOutput(logFile)
-
-	// 创建一个控制台日志钩子
 
 	// 设置控制台日志钩子为日志记录器的输出
 

@@ -29,16 +29,6 @@ const (
 	AccessCodeValidity = 30 * 24 * time.Hour // Access Code 有效期
 )
 
-func getAuthCode(appKey string, deviceId string) string {
-	url := fmt.Sprintf("http://openapi.baidu.com/oauth/2.0/authorize?response_type=code&client_id=%s&redirect_uri=oob&scope=basic,netdisk&device_id=%s", appKey, deviceId)
-	fmt.Printf("Please Click Url to Get Auth Code: %s \n", url)
-	fmt.Println("Please Input the Auth Code: ")
-	var authCode string
-	fmt.Scanln(&authCode)
-	fmt.Println("Get AuthCode is ", authCode)
-	return authCode
-}
-
 func getAcessToken(authCode string, clientId string, clientSecret string, redirectUri string) string {
 
 	configuration := openapiclient.NewConfiguration()
@@ -57,12 +47,11 @@ func getAcessToken(authCode string, clientId string, clientSecret string, redire
 	return string(bodyBytes)
 }
 
-func Login() {
+func Login(authCode string) authReturnType {
 	ctx := db.Client.Context()
 	appKey := config.BackUpConfig.BaiduDisk.AppKey
 	appSecret := config.BackUpConfig.BaiduDisk.SecretKey
 	redirectUri := config.BackUpConfig.BaiduDisk.RedirectUri
-	authCode := getAuthCode(appKey, appSecret)
 
 	respStr := getAcessToken(authCode, appKey, appSecret, redirectUri)
 
@@ -74,4 +63,5 @@ func Login() {
 	logrus.Info("Login Success AccessCode: ", resp.AccessToken)
 	db.Client.Set(ctx, "AccessCode", resp.AccessToken, AccessCodeValidity)
 	db.Client.Set(ctx, "RefreshCode", resp.RefreshToken, AccessCodeValidity*2)
+	return resp
 }

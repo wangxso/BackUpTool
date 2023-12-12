@@ -1,14 +1,18 @@
 package upload
 
 import (
+	"bytes"
 	"context"
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
+	"mime/multipart"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -18,6 +22,7 @@ import (
 	"github.com/wangxso/backuptool/config"
 	"github.com/wangxso/backuptool/db"
 	openapiclient "github.com/wangxso/backuptool/openxpanapi"
+	"github.com/wangxso/backuptool/utils"
 )
 
 const (
@@ -40,11 +45,21 @@ type createFileReturnType struct {
 	ServerFilename string `json:"server_filename"`
 	Category       int    `json:"category"`
 	Path           string `json:"path"`
-	Size           int    `json:"size"`
+	Size           uint64 `json:"size"`
 	Ctime          int64  `json:"ctime"`
 	Mtime          int64  `json:"mtime"`
 	IsDir          int    `json:"isdir"`
 	Name           string `json:"name"`
+}
+
+type UploadSmallFileReturn struct {
+	Ctime     int64  `json:"ctime"`
+	FsID      int64  `json:"fs_id"`
+	MD5       string `json:"md5"`
+	Mtime     int64  `json:"mtime"`
+	Path      string `json:"path"`
+	RequestID int64  `json:"request_id"`
+	Size      int64  `json:"size"`
 }
 
 func PreCreateUpload(accessToken string, path string, isdir int32, size int32, autoinit int32, blockList string, rtype int32) precreateReturnType {
@@ -165,6 +180,58 @@ func deleteOneChunks(fileName string) error {
 	return nil
 }
 
+func UploadSmallFile(accessToken, path, filePath string) (UploadSmallFileReturn, error) {
+	var ret UploadSmallFileReturn
+	host := "https://d.pcs.baidu.com"
+	uri := fmt.Sprintf("%s/rest/2.0/pcs/file?method=upload&", host)
+	// 读取文件上传
+
+	params := url.Values{}
+	params.Set("ondup", "overwrite")
+	params.Set("path", path)
+	params.Set("access_token", accessToken)
+	uri += params.Encode()
+	file, err := os.Open(filePath)
+	if err != nil {
+		panic(err.Error())
+	}
+	defer file.Close()
+	// stat, _ := file.Stat()
+	// filename := stat.Name()
+	body := new(bytes.Buffer)
+	writer := multipart.NewWriter(body)
+	part, err := writer.CreateFormFile("file", "file")
+	contentType := writer.FormDataContentType()
+	headers := map[string]string{
+		"Host":         host,
+		"Content-Type": contentType,
+	}
+	if err != nil {
+		panic(err.Error())
+
+	}
+	_, err = io.Copy(part, file)
+	if err != nil {
+		panic(err.Error())
+
+	}
+	err = writer.Close()
+	if err != nil {
+		panic(err.Error())
+
+	}
+	respBody, _, err := utils.SendHTTPRequest(uri, body, headers)
+	if err != nil {
+		return ret, err
+	}
+	if err = json.Unmarshal([]byte(respBody), &ret); err != nil {
+		logrus.Error("[msg: unmarshal filemetas body failed] err:", err.Error())
+		return ret, errors.New("unmarshal filemetas body failed,body")
+	}
+	logrus.Info(ret)
+	return ret, nil
+}
+
 func deleteChunks(fileName string) error {
 	// 分片计数器
 	chunkCount := 0
@@ -224,27 +291,6 @@ func Upload(targetPath, sourcePath string) (string, error) {
 
 	// Pre-create the upload
 	preCreateResp := PreCreateUpload(accessCode, targetPath, isDir, int32(size), autoInit, string(blockListStr), 3)
-	// Upload each slice of the file
-	// for i := 0; i < len(blockList); i++ {
-	// 	slicePath := fmt.Sprintf("%s.%d", filepath.Base(sourcePath), i)
-	// 	slicePath = filepath.Join(config.BackUpConfig.General.TmpDir, slicePath)
-	// 	file, err := os.Open(slicePath)
-	// 	if err != nil {
-	// 		panic(err.Error())
-	// 	}
-	// 	err = UploadSlice(accessCode, strconv.Itoa(i), targetPath, preCreateResp.Uploadid, "tmpfile", file)
-	// 	if err != nil {
-	// 		panic(err.Error())
-	// 	}
-	// 	// Create the final upload
-	// 	logrus.Infof("[UploadSlice] %d/%d", i, len(blockList))
-	// }
-
-	// resp := UploadCreate(accessCode, targetPath, isDir, int32(size), preCreateResp.Uploadid, blockListStr, 3)
-	// if resp.Errno == 0 {
-	// 	// 上传成功
-	// 	return resp.MD5, err
-	// }
 	var wg sync.WaitGroup
 	errChan := make(chan error, len(blockList))
 	for i := 0; i < len(blockList); i++ {
