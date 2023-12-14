@@ -101,9 +101,25 @@ func SyncFolder() error {
 		targetMD5, _ := redisCli.HGet(redisCli.Context(), UPLOAD_PATHS, cloudMD5).Result()
 		if sourceMD5 != targetMD5 {
 			logrus.Info("filename: ", filepath.Join(targetFolder, relativePath, filename), " md5: ", sourceMD5, " Upload File")
-			respMD5, err := upload.Upload(filepath.Join(targetFolder, relativePath, filename), path)
+			file, err := os.Open(path)
 			if err != nil {
 				panic(err)
+			}
+			defer file.Close()
+			stat, _ := file.Stat()
+			fileSize := stat.Size()
+			var respMD5 string
+			if fileSize <= 1024*1024*4 {
+				ret, err := upload.UploadSmallFile(accessToken, filepath.Join(targetFolder, relativePath, path), path)
+				respMD5 = ret.MD5
+				if err != nil {
+					panic(err)
+				}
+			} else {
+				respMD5, err = upload.Upload(filepath.Join(targetFolder, relativePath, filename), path)
+				if err != nil {
+					panic(err)
+				}
 			}
 			redisCli.HSet(redisCli.Context(), UPLOAD_PATHS, respMD5, sourceMD5)
 		} else {

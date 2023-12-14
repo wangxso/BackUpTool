@@ -55,7 +55,7 @@ func CalculateMD5(path string) (string, error) {
 }
 
 func DoHTTPRequest(url string, body io.Reader, headers map[string]string) (string, int, error) {
-	timeout := 5 * time.Second
+	timeout := 10 * time.Second
 	retryTimes := 3
 	tr := &http.Transport{
 		MaxIdleConnsPerHost: -1,
@@ -84,7 +84,7 @@ func DoHTTPRequest(url string, body io.Reader, headers map[string]string) (strin
 	}
 
 	defer resp.Body.Close()
-	respBody, err := ioutil.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", resp.StatusCode, err
 	}
@@ -93,9 +93,9 @@ func DoHTTPRequest(url string, body io.Reader, headers map[string]string) (strin
 
 // for superfile2
 func SendHTTPRequest(url string, body io.Reader, headers map[string]string) (string, int, error) {
-	timeout := 60 * time.Second
+	timeout := 120 * time.Second
 	retryTimes := 3
-	postData, _ := ioutil.ReadAll(body)
+	postData, _ := io.ReadAll(body)
 	var resp *http.Response
 	for i := 1; i <= retryTimes; i++ {
 		tr := &http.Transport{
@@ -121,7 +121,7 @@ func SendHTTPRequest(url string, body io.Reader, headers map[string]string) (str
 		}
 	}
 	defer resp.Body.Close()
-	respBody, err := ioutil.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", resp.StatusCode, err
 	}
